@@ -42,10 +42,6 @@ class TreeLock():
         self._locks = weakref.WeakValueDictionary()
 
     @staticmethod
-    def _sort_key(node_lock):
-        return len(node_lock[0].parents), node_lock[0].as_posix()
-
-    @staticmethod
     def _flatten(to_flatten):
         return [
             item for sub_list in to_flatten for item in sub_list
@@ -75,8 +71,7 @@ class TreeLock():
         read_ancestor_locks = self._with_locks(read_ancestor_nodes, ReadAncestor)
 
         sorted_locks = sorted(
-            read_locks + read_ancestor_locks + write_locks + write_ancestor_locks,
-            key=self._sort_key)
+            read_locks + read_ancestor_locks + write_locks + write_ancestor_locks)
         async with contextlib.AsyncExitStack() as stack:
             for _, lock, mode in sorted_locks:
                 await stack.enter_async_context(lock(mode))
