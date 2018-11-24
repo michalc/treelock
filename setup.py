@@ -22,6 +22,7 @@ setuptools.setup(
     install_requires=[
         'fifolock',
     ],
+    test_suite='test',
     classifiers=[
         'Programming Language :: Python :: 3',
         'License :: OSI Approved :: MIT License',
