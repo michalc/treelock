@@ -2,6 +2,8 @@
 
 Constant-time read/write sub-tree locking for asyncio Python. Suitable for large trees, when it's not feasible or desired to have the entire tree in memory at once.
 
+Inspired by the work of [Ritik Malhotra](https://people.eecs.berkeley.edu/~kubitron/courses/cs262a-F14/projects/reports/project6_report.pdf).
+
 
 ## Usage
 
