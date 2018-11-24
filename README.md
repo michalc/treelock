@@ -1,4 +1,4 @@
-# treelock
+# treelock [![CircleCI](https://circleci.com/gh/michalc/treelock.svg?style=svg)](https://circleci.com/gh/michalc/treelock) [![Maintainability](https://api.codeclimate.com/v1/badges/d0174cccc3f8974fa4e7/maintainability)](https://codeclimate.com/github/michalc/treelock/maintainability) [![Test Coverage](https://api.codeclimate.com/v1/badges/d0174cccc3f8974fa4e7/test_coverage)](https://codeclimate.com/github/michalc/treelock/test_coverage)
 
 Constant-time read/write sub-tree locking for asyncio Python. Suitable for large trees, when it's not feasable or desired to have the entire tree in memory at once.
 
