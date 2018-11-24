@@ -199,3 +199,84 @@ class TestTreeLock(unittest.TestCase):
 
         self.assertEqual(started_history[0][0], True)
         self.assertEqual(started_history[0][1], True)
+
+    # The below tests are slightly strange edge-cases: where client codes
+    # passes nodes in the same lineage
+
+    @async_test
+    async def test_writes_to_same_lineage(self):
+
+        lock = TreeLock()
+
+        # Same path
+        started_history = await complete_one_at_at_time(create_tree_tasks(
+            lock,
+            {'read': [], 'write': [path('/a/b/c'), path('/a/b/c')]},
+        ))
+        self.assertEqual(started_history[0][0], True)
+
+        # Descendant path
+        started_history = await complete_one_at_at_time(create_tree_tasks(
+            lock,
+            {'read': [], 'write': [path('/a/b/c'), path('/a/b/c/d/e')]},
+        ))
+        self.assertEqual(started_history[0][0], True)
+
+        # Ancestor path (ensures the order doesn't matter)
+        started_history = await complete_one_at_at_time(create_tree_tasks(
+            lock,
+            {'read': [], 'write': [path('/a/b/c'), path('/a')]},
+        ))
+        self.assertEqual(started_history[0][0], True)
+
+    @async_test
+    async def test_reads_to_same_lineage(self):
+
+        lock = TreeLock()
+
+        # Same path
+        started_history = await complete_one_at_at_time(create_tree_tasks(
+            lock,
+            {'read': [path('/a/b/c'), path('/a/b/c')], 'write': []},
+        ))
+        self.assertEqual(started_history[0][0], True)
+
+        # Descendant path
+        started_history = await complete_one_at_at_time(create_tree_tasks(
+            lock,
+            {'read': [path('/a/b/c'), path('/a/b/c/d/e')], 'write': []},
+        ))
+        self.assertEqual(started_history[0][0], True)
+
+        # Ancestor path (ensures the order doesn't matter)
+        started_history = await complete_one_at_at_time(create_tree_tasks(
+            lock,
+            {'read': [path('/a/b/c'), path('/a')], 'write': []},
+        ))
+        self.assertEqual(started_history[0][0], True)
+
+    @async_test
+    async def test_reads_and_write_to_same_lineage(self):
+
+        lock = TreeLock()
+
+        # Same path
+        started_history = await complete_one_at_at_time(create_tree_tasks(
+            lock,
+            {'read': [path('/a/b/c')], 'write': [path('/a/b/c')]},
+        ))
+        self.assertEqual(started_history[0][0], True)
+
+        # Write descendant path of read
+        started_history = await complete_one_at_at_time(create_tree_tasks(
+            lock,
+            {'read': [path('/a/b/c')], 'write': [path('/a/b/c/d/e')]},
+        ))
+        self.assertEqual(started_history[0][0], True)
+
+        # Write ancestor path of read
+        started_history = await complete_one_at_at_time(create_tree_tasks(
+            lock,
+            {'read': [path('/a/b/c')], 'write': [path('/a')]},
+        ))
+        self.assertEqual(started_history[0][0], True)
