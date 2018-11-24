@@ -24,8 +24,16 @@ def create_tree_tasks(lock, *nodes_list):
     return [task(nodes) for nodes in nodes_list]
 
 
-def has_started(task_states):
-    return [state.started.done() for state in task_states]
+async def complete_one_at_at_time(task_states):
+    history = []
+
+    for task_state in task_states:
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        history.append([state.started.done() for state in task_states])
+        task_state.done.set_result(None)
+
+    return history
 
 
 def async_test(func):
@@ -48,55 +56,32 @@ class TestTreeLock(unittest.TestCase):
         lock = TreeLock()
 
         # Same path
-        task_states = create_tree_tasks(
+        started_history = await complete_one_at_at_time(create_tree_tasks(
             lock,
             {'read': [], 'write': [path('/a/b/c')]},
             {'read': [], 'write': [path('/a/b/c')]},
-        )
+        ))
 
-        await asyncio.sleep(0)
-        self.assertEqual(has_started(task_states)[0], True)
-        self.assertEqual(has_started(task_states)[1], False)
-
-        task_states[0].done.set_result(None)
-        await asyncio.sleep(0)
-        await asyncio.sleep(0)
-        self.assertEqual(has_started(task_states)[1], True)
-
-        task_states[1].done.set_result(None)
+        self.assertEqual(started_history[0][0], True)
+        self.assertEqual(started_history[0][1], False)
+        self.assertEqual(started_history[1][1], True)
 
         # Descendant path
-        task_states = create_tree_tasks(
+        task_states = await complete_one_at_at_time(create_tree_tasks(
             lock,
             {'read': [], 'write': [path('/a/b/c')]},
             {'read': [], 'write': [path('/a/b/c/d/e')]},
-        )
-
-        await asyncio.sleep(0)
-        self.assertEqual(has_started(task_states)[0], True)
-        self.assertEqual(has_started(task_states)[1], False)
-
-        task_states[0].done.set_result(None)
-        await asyncio.sleep(0)
-        await asyncio.sleep(0)
-        self.assertEqual(has_started(task_states)[1], True)
-
-        task_states[1].done.set_result(None)
+        ))
+        self.assertEqual(started_history[0][0], True)
+        self.assertEqual(started_history[0][1], False)
+        self.assertEqual(started_history[1][1], True)
 
         # Ancestor path (ensures the order doesn't matter)
-        task_states = create_tree_tasks(
+        task_states = await complete_one_at_at_time(create_tree_tasks(
             lock,
             {'read': [], 'write': [path('/a/b/c')]},
             {'read': [], 'write': [path('/a')]},
-        )
-
-        await asyncio.sleep(0)
-        self.assertEqual(has_started(task_states)[0], True)
-        self.assertEqual(has_started(task_states)[1], False)
-
-        task_states[0].done.set_result(None)
-        await asyncio.sleep(0)
-        await asyncio.sleep(0)
-        self.assertEqual(has_started(task_states)[1], True)
-
-        task_states[1].done.set_result(None)
+        ))
+        self.assertEqual(started_history[0][0], True)
+        self.assertEqual(started_history[0][1], False)
+        self.assertEqual(started_history[1][1], True)
