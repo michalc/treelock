@@ -42,8 +42,8 @@ class TreeLock():
         self._locks = weakref.WeakValueDictionary()
 
     @staticmethod
-    def _sort_key(path_lock):
-        return len(path_lock[0].parents), path_lock[0].as_posix()
+    def _sort_key(node_lock):
+        return len(node_lock[0].parents), node_lock[0].as_posix()
 
     @staticmethod
     def _flatten(to_flatten):
@@ -51,28 +51,28 @@ class TreeLock():
             item for sub_list in to_flatten for item in sub_list
         ]
 
-    def _with_locks(self, paths, mode):
+    def _with_locks(self, nodes, mode):
         return [
-            (path, self._locks.setdefault(path, default=FifoLock()), mode)
-            for path in paths
+            (node, self._locks.setdefault(node, default=FifoLock()), mode)
+            for node in nodes
         ]
 
     @contextlib.asynccontextmanager
     async def __call__(self, read, write):
-        write_paths = set(write)
-        write_locks = self._with_locks(write_paths, Write)
+        write_nodes = set(write)
+        write_locks = self._with_locks(write_nodes, Write)
 
-        write_ancestor_paths = set(self._flatten(path.parents for path in write_paths)) \
-            - write_paths
-        write_ancestor_locks = self._with_locks(write_ancestor_paths, WriteAncestor)
+        write_ancestor_nodes = set(self._flatten(node.parents for node in write_nodes)) \
+            - write_nodes
+        write_ancestor_locks = self._with_locks(write_ancestor_nodes, WriteAncestor)
 
-        read_paths = set(read) \
-            - write_paths - write_ancestor_paths
-        read_locks = self._with_locks(read_paths, Read)
+        read_nodes = set(read) \
+            - write_nodes - write_ancestor_nodes
+        read_locks = self._with_locks(read_nodes, Read)
 
-        read_ancestor_paths = set(self._flatten(path.parents for path in read_paths)) \
-            - write_paths - write_ancestor_paths - read_paths
-        read_ancestor_locks = self._with_locks(read_ancestor_paths, ReadAncestor)
+        read_ancestor_nodes = set(self._flatten(node.parents for node in read_nodes)) \
+            - write_nodes - write_ancestor_nodes - read_nodes
+        read_ancestor_locks = self._with_locks(read_ancestor_nodes, ReadAncestor)
 
         sorted_locks = sorted(
             read_locks + read_ancestor_locks + write_locks + write_ancestor_locks,
