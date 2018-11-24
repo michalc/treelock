@@ -36,7 +36,7 @@ class Write(asyncio.Future):
         )
 
 
-class PathLock():
+class TreeLock():
 
     def __init__(self):
         self._locks = weakref.WeakValueDictionary()
