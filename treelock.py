@@ -41,12 +41,6 @@ class TreeLock():
     def __init__(self):
         self._locks = weakref.WeakValueDictionary()
 
-    @staticmethod
-    def _flatten(to_flatten):
-        return [
-            item for sub_list in to_flatten for item in sub_list
-        ]
-
     def _with_locks(self, nodes, mode):
         return [
             (node, self._locks.setdefault(node, default=FifoLock()), mode)
@@ -58,7 +52,7 @@ class TreeLock():
         write_nodes = set(write)
         write_locks = self._with_locks(write_nodes, Write)
 
-        write_ancestor_nodes = set(self._flatten(node.parents for node in write_nodes)) \
+        write_ancestor_nodes = set(_flatten(node.parents for node in write_nodes)) \
             - write_nodes
         write_ancestor_locks = self._with_locks(write_ancestor_nodes, WriteAncestor)
 
@@ -66,7 +60,7 @@ class TreeLock():
             - write_nodes - write_ancestor_nodes
         read_locks = self._with_locks(read_nodes, Read)
 
-        read_ancestor_nodes = set(self._flatten(node.parents for node in read_nodes)) \
+        read_ancestor_nodes = set(_flatten(node.parents for node in read_nodes)) \
             - write_nodes - write_ancestor_nodes - read_nodes
         read_ancestor_locks = self._with_locks(read_ancestor_nodes, ReadAncestor)
 
@@ -77,3 +71,9 @@ class TreeLock():
                 await stack.enter_async_context(lock(mode))
 
             yield
+
+
+def _flatten(to_flatten):
+    return [
+        item for sub_list in to_flatten for item in sub_list
+    ]
