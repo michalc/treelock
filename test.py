@@ -51,6 +51,42 @@ def path(path_str):
 class TestTreeLock(unittest.TestCase):
 
     @async_test
+    async def test_write_blocks_read(self):
+
+        lock = TreeLock()
+
+        # Same path
+        started_history = await complete_one_at_at_time(create_tree_tasks(
+            lock,
+            {'read': [], 'write': [path('/a/b/c')]},
+            {'read': [path('/a/b/c')], 'write': []},
+        ))
+
+        self.assertEqual(started_history[0][0], True)
+        self.assertEqual(started_history[0][1], False)
+        self.assertEqual(started_history[1][1], True)
+
+        # Descendant path
+        task_states = await complete_one_at_at_time(create_tree_tasks(
+            lock,
+            {'read': [], 'write': [path('/a/b/c')]},
+            {'read': [path('/a/b/c/d/e')], 'write': []},
+        ))
+        self.assertEqual(started_history[0][0], True)
+        self.assertEqual(started_history[0][1], False)
+        self.assertEqual(started_history[1][1], True)
+
+        # Ancestor path (ensures the order doesn't matter)
+        task_states = await complete_one_at_at_time(create_tree_tasks(
+            lock,
+            {'read': [], 'write': [path('/a/b/c')]},
+            {'read': [path('/a')], 'write': []},
+        ))
+        self.assertEqual(started_history[0][0], True)
+        self.assertEqual(started_history[0][1], False)
+        self.assertEqual(started_history[1][1], True)
+
+    @async_test
     async def test_write_blocks_write(self):
 
         lock = TreeLock()
@@ -85,3 +121,81 @@ class TestTreeLock(unittest.TestCase):
         self.assertEqual(started_history[0][0], True)
         self.assertEqual(started_history[0][1], False)
         self.assertEqual(started_history[1][1], True)
+
+    @async_test
+    async def test_write_allows_unrelated_write(self):
+
+        lock = TreeLock()
+
+        # Same path
+        started_history = await complete_one_at_at_time(create_tree_tasks(
+            lock,
+            {'read': [], 'write': [path('/a/b/c')]},
+            {'read': [], 'write': [path('/a/b/e')]},
+        ))
+
+        self.assertEqual(started_history[0][0], True)
+        self.assertEqual(started_history[0][1], True)
+
+    @async_test
+    async def test_write_allows_unrelated_read(self):
+
+        lock = TreeLock()
+
+        # Same path
+        started_history = await complete_one_at_at_time(create_tree_tasks(
+            lock,
+            {'read': [], 'write': [path('/a/b/c')]},
+            {'read': [path('/a/b/e')], 'write': []},
+        ))
+
+        self.assertEqual(started_history[0][0], True)
+        self.assertEqual(started_history[0][1], True)
+
+    @async_test
+    async def test_read_allows_read(self):
+
+        lock = TreeLock()
+
+        # Same path
+        started_history = await complete_one_at_at_time(create_tree_tasks(
+            lock,
+            {'read': [path('/a/b/c')], 'write': []},
+            {'read': [path('/a/b/c')], 'write': []},
+        ))
+
+        self.assertEqual(started_history[0][0], True)
+        self.assertEqual(started_history[0][1], True)
+
+        # Descendant path
+        task_states = await complete_one_at_at_time(create_tree_tasks(
+            lock,
+            {'read': [path('/a/b/c')], 'write': []},
+            {'read': [path('/a/b/c/d/e')], 'write': []},
+        ))
+        self.assertEqual(started_history[0][0], True)
+        self.assertEqual(started_history[0][1], True)
+
+        # Ancestor path (ensures the order doesn't matter)
+        task_states = await complete_one_at_at_time(create_tree_tasks(
+            lock,
+            {'read': [path('/a/b/c')], 'write': []},
+            {'read': [path('/a')], 'write': []},
+        ))
+        self.assertEqual(started_history[0][0], True)
+        self.assertEqual(started_history[0][1], True)
+
+    @async_test
+    async def test_read_allows_unrelated_read(self):
+
+        lock = TreeLock()
+
+        # Same path
+        started_history = await complete_one_at_at_time(create_tree_tasks(
+            lock,
+            {'read': [path('/a/b/c')], 'write': []},
+            {'read': [path('/a/b/e')], 'write': []},
+        ))
+
+        self.assertEqual(started_history[0][0], True)
+        self.assertEqual(started_history[0][1], True)
