@@ -5,7 +5,7 @@ Constant-time read/write sub-tree locking for asyncio Python. Suitable for large
 
 ## Usage
 
-A typical use-case will be for read/write (shared/exclusive) locking of a path in a filesystem hierarchy. For example, if treating S3 as a filesystem, but allowing what-whould-be non-atomic operations on folders. 
+A typical use-case will be for read/write (shared/exclusive) locking of a path in a filesystem hierarchy. For example, if treating S3 as a filesystem, but allowing what-whould-be non-atomic operations on folders.
 
 For example, you could define `delete`, `write`, `rename`, `copy` and `read` operations on folders at certain <em>paths</em>, e.g. instances of `PurePosixPath`. A read lock of such a path should allow reads of the corresponding folder, but block all operations that would change it. A write lock should prevent all other access to that folder. You can do this using `TreeLock`, noting that each path is in fact a node in tree.
 
