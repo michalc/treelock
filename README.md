@@ -7,6 +7,20 @@ Inspired by the work of [Ritik Malhotra](https://people.eecs.berkeley.edu/~kubit
 
 ## Usage
 
+Each instance of `TreeLock` is callable, and returns an asynchronous context manager. In order to acquire a read (shared) lock on the sub-trees with root nodes in the iterable `read_roots`; and to acquire a write (exclusive) lock of the sub-trees with root nodes in the iterable `write_roots`, you must pass them to the instance of `TreeLock`:
+
+```python
+from treelock import TreeLock
+
+lock = TreeLock()
+
+def access(read_roots, write_roots):
+  async with lock(read=read_roots, write=write_roots):
+    # access the sub-trees
+```
+
+The lock is _not_ re-entrant: the same task attempting to enter multiple context managers with incompatible sub-trees will deadlock. Hence the locks for all the required sub-trees must be requested up-front.
+
 A typical use-case will be for read/write (shared/exclusive) locking of a path in a filesystem hierarchy. For example, if treating S3 as a filesystem, but allowing what-whould-be non-atomic operations on folders.
 
 For example, you could define `delete`, `write`, `rename`, `copy` and `read` operations on folders at certain <em>paths</em>, e.g. instances of `PurePosixPath`. A read lock of such a path should allow reads of the corresponding folder, but block all operations that would change it. A write lock should prevent all other access to that folder. You can do this using `TreeLock`, noting that each path is in fact a node in the tree of all possible paths.
