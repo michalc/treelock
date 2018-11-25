@@ -37,7 +37,7 @@ async def read(path):
     ...
 ```
 
-There is more information on this usage at https://charemza.name/blog/posts/python/asyncio/s3-path-locking/.
+There is more information on this usage, as well as details of the underlying algorithm, at https://charemza.name/blog/posts/python/asyncio/s3-path-locking/.
 
 
 ## Required properties of the nodes
