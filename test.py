@@ -36,6 +36,21 @@ async def complete_one_at_at_time(task_states):
     return history
 
 
+async def cancel_first_then_complete_one_at_at_time(task_states):
+    history = []
+
+    for i, task_state in enumerate(task_states):
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        history.append([state.started.done() for state in task_states])
+        if i == 0:
+            task_state.task.cancel()
+        else:
+            task_state.done.set_result(None)
+
+    return history
+
+
 def async_test(func):
     def wrapper(*args, **kwargs):
         future = func(*args, **kwargs)
@@ -227,6 +242,34 @@ class TestTreeLock(unittest.TestCase):
             {'read': [], 'write': [path('/a/b/d')]},
         ))
         self.assertEqual(started_history[0][2], True)
+
+    # Ensure cancellation unblocks
+
+    @async_test
+    async def test_blocked_write_unblocked_by_cancellation(self):
+
+        lock = TreeLock()
+
+        started_history = await cancel_first_then_complete_one_at_at_time(create_tree_tasks(
+            lock,
+            {'read': [], 'write': [path('/a/b/c')]},
+            {'read': [], 'write': [path('/a/b/c/d')]},
+        ))
+        self.assertEqual(started_history[0][1], False)
+        self.assertEqual(started_history[1][1], True)
+
+    @async_test
+    async def test_blocked_read_unblocked_by_cancellation(self):
+
+        lock = TreeLock()
+
+        started_history = await cancel_first_then_complete_one_at_at_time(create_tree_tasks(
+            lock,
+            {'read': [], 'write': [path('/a/b/c')]},
+            {'read': [path('/a/b/c/d')], 'write': []},
+        ))
+        self.assertEqual(started_history[0][1], False)
+        self.assertEqual(started_history[1][1], True)
 
     # The below tests are slightly strange edge-cases: where client codes
     # passes nodes in the same lineage
