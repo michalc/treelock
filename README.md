@@ -21,7 +21,7 @@ from treelock import TreeLock
 
 lock = TreeLock()
 
-def access(read_roots, write_roots):
+async def access(read_roots, write_roots):
   async with lock(read=read_roots, write=write_roots):
     # access the sub-trees
 ```
