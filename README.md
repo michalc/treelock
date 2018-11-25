@@ -5,6 +5,13 @@ Constant-time read/write sub-tree locking for asyncio Python. Suitable for large
 Inspired by the work of [Ritik Malhotra](https://people.eecs.berkeley.edu/~kubitron/courses/cs262a-F14/projects/reports/project6_report.pdf).
 
 
+## Installation
+
+```bash
+pip install treelock
+```
+
+
 ## Usage
 
 Each instance of `TreeLock` is callable, and returns an asynchronous context manager. In order to acquire a read (shared) lock on the sub-trees with root nodes in the iterable `read_roots`; and to acquire a write (exclusive) lock of the sub-trees with root nodes in the iterable `write_roots`, you must pass them to the instance of `TreeLock`:
