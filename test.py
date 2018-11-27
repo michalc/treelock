@@ -9,46 +9,47 @@ from treelock import TreeLock
 TaskState = collections.namedtuple('TaskState', ['acquired', 'done', 'task'])
 
 
-def create_tree_tasks(lock, *nodes_list):
-    async def access(nodes, acquired, done):
-        async with lock(**nodes):
+def create_tree_tasks(*lock_modes):
+    async def access(lock_mode, acquired, done):
+        async with lock_mode:
             acquired.set_result(None)
             await done
 
-    def task(nodes):
+    def task(lock_mode):
         acquired = asyncio.Future()
         done = asyncio.Future()
-        task = asyncio.create_task(access(nodes, acquired, done))
+        task = asyncio.create_task(access(lock_mode, acquired, done))
         return TaskState(acquired=acquired, done=done, task=task)
 
-    return [task(nodes) for nodes in nodes_list]
+    return [task(lock_mode) for lock_mode in lock_modes]
 
 
-async def complete_one_at_at_time(task_states):
+async def mutate_tasks_in_sequence(task_states, *funcs):
     history = []
 
-    for task_state in task_states:
+    for func in funcs + (null, ):
         await asyncio.sleep(0)
         await asyncio.sleep(0)
         history.append([state.acquired.done() for state in task_states])
-        task_state.done.set_result(None)
+        func(task_states)
 
     return history
 
 
-async def cancel_first_then_complete_one_at_at_time(task_states):
-    history = []
+def cancel(i):
+    def func(tasks):
+        tasks[i].task.cancel()
+    return func
 
-    for i, task_state in enumerate(task_states):
-        await asyncio.sleep(0)
-        await asyncio.sleep(0)
-        history.append([state.acquired.done() for state in task_states])
-        if i == 0:
-            task_state.task.cancel()
-        else:
-            task_state.done.set_result(None)
 
-    return history
+def complete(i):
+    def func(tasks):
+        tasks[i].done.set_result(None)
+    return func
+
+
+def null(_):
+    pass
 
 
 def async_test(func):
@@ -71,35 +72,28 @@ class TestTreeLock(unittest.TestCase):
         lock = TreeLock()
 
         # Same path
-        acquired_history = await complete_one_at_at_time(create_tree_tasks(
-            lock,
-            {'read': [], 'write': [path('/a/b/c')]},
-            {'read': [path('/a/b/c')], 'write': []},
-        ))
-
-        self.assertEqual(acquired_history[0][0], True)
-        self.assertEqual(acquired_history[0][1], False)
-        self.assertEqual(acquired_history[1][1], True)
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[], write=[path('/a/b/c')]),
+            lock(read=[path('/a/b/c')], write=[]),
+        ), complete(0), complete(1))
+        self.assertEqual(acquired_history[0], [True, False])
+        self.assertEqual(acquired_history[1], [True, True])
 
         # Descendant path
-        task_states = await complete_one_at_at_time(create_tree_tasks(
-            lock,
-            {'read': [], 'write': [path('/a/b/c')]},
-            {'read': [path('/a/b/c/d/e')], 'write': []},
-        ))
-        self.assertEqual(acquired_history[0][0], True)
-        self.assertEqual(acquired_history[0][1], False)
-        self.assertEqual(acquired_history[1][1], True)
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[], write=[path('/a/b/c')]),
+            lock(read=[path('/a/b/c/d/e')], write=[]),
+        ), complete(0), complete(1))
+        self.assertEqual(acquired_history[0], [True, False])
+        self.assertEqual(acquired_history[1], [True, True])
 
         # Ancestor path (ensures the order doesn't matter)
-        task_states = await complete_one_at_at_time(create_tree_tasks(
-            lock,
-            {'read': [], 'write': [path('/a/b/c')]},
-            {'read': [path('/a')], 'write': []},
-        ))
-        self.assertEqual(acquired_history[0][0], True)
-        self.assertEqual(acquired_history[0][1], False)
-        self.assertEqual(acquired_history[1][1], True)
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[], write=[path('/a/b/c')]),
+            lock(read=[path('/a')], write=[]),
+        ), complete(0), complete(1))
+        self.assertEqual(acquired_history[0], [True, False])
+        self.assertEqual(acquired_history[1], [True, True])
 
     @async_test
     async def test_write_blocks_write(self):
@@ -107,35 +101,28 @@ class TestTreeLock(unittest.TestCase):
         lock = TreeLock()
 
         # Same path
-        acquired_history = await complete_one_at_at_time(create_tree_tasks(
-            lock,
-            {'read': [], 'write': [path('/a/b/c')]},
-            {'read': [], 'write': [path('/a/b/c')]},
-        ))
-
-        self.assertEqual(acquired_history[0][0], True)
-        self.assertEqual(acquired_history[0][1], False)
-        self.assertEqual(acquired_history[1][1], True)
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[], write=[path('/a/b/c')]),
+            lock(read=[], write=[path('/a/b/c')]),
+        ), complete(0), complete(1))
+        self.assertEqual(acquired_history[0], [True, False])
+        self.assertEqual(acquired_history[1], [True, True])
 
         # Descendant path
-        task_states = await complete_one_at_at_time(create_tree_tasks(
-            lock,
-            {'read': [], 'write': [path('/a/b/c')]},
-            {'read': [], 'write': [path('/a/b/c/d/e')]},
-        ))
-        self.assertEqual(acquired_history[0][0], True)
-        self.assertEqual(acquired_history[0][1], False)
-        self.assertEqual(acquired_history[1][1], True)
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[], write=[path('/a/b/c')]),
+            lock(read=[], write=[path('/a/b/c/d/e')]),
+        ), complete(0), complete(1))
+        self.assertEqual(acquired_history[0], [True, False])
+        self.assertEqual(acquired_history[1], [True, True])
 
         # Ancestor path (ensures the order doesn't matter)
-        task_states = await complete_one_at_at_time(create_tree_tasks(
-            lock,
-            {'read': [], 'write': [path('/a/b/c')]},
-            {'read': [], 'write': [path('/a')]},
-        ))
-        self.assertEqual(acquired_history[0][0], True)
-        self.assertEqual(acquired_history[0][1], False)
-        self.assertEqual(acquired_history[1][1], True)
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[], write=[path('/a/b/c')]),
+            lock(read=[], write=[path('/a')]),
+        ), complete(0), complete(1))
+        self.assertEqual(acquired_history[0], [True, False])
+        self.assertEqual(acquired_history[1], [True, True])
 
     @async_test
     async def test_write_allows_unrelated_write(self):
@@ -143,14 +130,11 @@ class TestTreeLock(unittest.TestCase):
         lock = TreeLock()
 
         # Same path
-        acquired_history = await complete_one_at_at_time(create_tree_tasks(
-            lock,
-            {'read': [], 'write': [path('/a/b/c')]},
-            {'read': [], 'write': [path('/a/b/e')]},
-        ))
-
-        self.assertEqual(acquired_history[0][0], True)
-        self.assertEqual(acquired_history[0][1], True)
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[], write=[path('/a/b/c')]),
+            lock(read=[], write=[path('/a/b/e')]),
+        ), complete(0), complete(1))
+        self.assertEqual(acquired_history[0], [True, True])
 
     @async_test
     async def test_write_allows_unrelated_read(self):
@@ -158,14 +142,11 @@ class TestTreeLock(unittest.TestCase):
         lock = TreeLock()
 
         # Same path
-        acquired_history = await complete_one_at_at_time(create_tree_tasks(
-            lock,
-            {'read': [], 'write': [path('/a/b/c')]},
-            {'read': [path('/a/b/e')], 'write': []},
-        ))
-
-        self.assertEqual(acquired_history[0][0], True)
-        self.assertEqual(acquired_history[0][1], True)
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[], write=[path('/a/b/c')]),
+            lock(read=[path('/a/b/e')], write=[]),
+        ), complete(0), complete(1))
+        self.assertEqual(acquired_history[0], [True, True])
 
     @async_test
     async def test_read_allows_read(self):
@@ -173,75 +154,64 @@ class TestTreeLock(unittest.TestCase):
         lock = TreeLock()
 
         # Same path
-        acquired_history = await complete_one_at_at_time(create_tree_tasks(
-            lock,
-            {'read': [path('/a/b/c')], 'write': []},
-            {'read': [path('/a/b/c')], 'write': []},
-        ))
-
-        self.assertEqual(acquired_history[0][0], True)
-        self.assertEqual(acquired_history[0][1], True)
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[path('/a/b/c')], write=[]),
+            lock(read=[path('/a/b/c')], write=[]),
+        ), complete(0), complete(1))
+        self.assertEqual(acquired_history[0], [True, True])
 
         # Descendant path
-        task_states = await complete_one_at_at_time(create_tree_tasks(
-            lock,
-            {'read': [path('/a/b/c')], 'write': []},
-            {'read': [path('/a/b/c/d/e')], 'write': []},
-        ))
-        self.assertEqual(acquired_history[0][0], True)
-        self.assertEqual(acquired_history[0][1], True)
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[path('/a/b/c')], write=[]),
+            lock(read=[path('/a/b/c/d/e')], write=[]),
+        ), complete(0), complete(1))
+        self.assertEqual(acquired_history[0], [True, True])
 
         # Ancestor path (ensures the order doesn't matter)
-        task_states = await complete_one_at_at_time(create_tree_tasks(
-            lock,
-            {'read': [path('/a/b/c')], 'write': []},
-            {'read': [path('/a')], 'write': []},
-        ))
-        self.assertEqual(acquired_history[0][0], True)
-        self.assertEqual(acquired_history[0][1], True)
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[path('/a/b/c')], write=[]),
+            lock(read=[path('/a')], write=[]),
+        ), complete(0), complete(1))
+        self.assertEqual(acquired_history[0], [True, True])
 
     @async_test
     async def test_read_allows_unrelated_read(self):
 
         lock = TreeLock()
 
-        # Same path
-        acquired_history = await complete_one_at_at_time(create_tree_tasks(
-            lock,
-            {'read': [path('/a/b/c')], 'write': []},
-            {'read': [path('/a/b/e')], 'write': []},
-        ))
-
-        self.assertEqual(acquired_history[0][0], True)
-        self.assertEqual(acquired_history[0][1], True)
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[path('/a/b/c')], write=[]),
+            lock(read=[path('/a/b/e')], write=[]),
+        ), complete(0), complete(1))
+        self.assertEqual(acquired_history[0], [True, True])
 
     # The below tests ensure that a block doesn't stop tasks queued after
 
     @async_test
-    async def test_blocked_write_not_block_unrelated_read(self):
+    async def test_blocked_read_not_block_unrelated_read(self):
 
         lock = TreeLock()
 
-        acquired_history = await complete_one_at_at_time(create_tree_tasks(
-            lock,
-            {'read': [], 'write': [path('/a/b/c')]},
-            {'read': [path('/a/b/c')], 'write': []},
-            {'read': [path('/a/b/d')], 'write': []},
-        ))
-        self.assertEqual(acquired_history[0][2], True)
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[], write=[path('/a/b/c')]),
+            lock(read=[path('/a/b/c')], write=[]),
+            lock(read=[path('/a/b/d')], write=[]),
+        ), complete(0), complete(1), complete(2))
+        self.assertEqual(acquired_history[0], [True, False, True])
+        self.assertEqual(acquired_history[1], [True, True, True])
 
     @async_test
     async def test_blocked_write_not_block_unrelated_write(self):
 
         lock = TreeLock()
 
-        acquired_history = await complete_one_at_at_time(create_tree_tasks(
-            lock,
-            {'read': [], 'write': [path('/a/b/c')]},
-            {'read': [], 'write': [path('/a/b/c')]},
-            {'read': [], 'write': [path('/a/b/d')]},
-        ))
-        self.assertEqual(acquired_history[0][2], True)
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[], write=[path('/a/b/c')]),
+            lock(read=[], write=[path('/a/b/c')]),
+            lock(read=[], write=[path('/a/b/d')]),
+        ), complete(0), complete(1), complete(2))
+        self.assertEqual(acquired_history[0], [True, False, True])
+        self.assertEqual(acquired_history[1], [True, True, True])
 
     # Ensure cancellation unblocks
 
@@ -250,26 +220,24 @@ class TestTreeLock(unittest.TestCase):
 
         lock = TreeLock()
 
-        acquired_history = await cancel_first_then_complete_one_at_at_time(create_tree_tasks(
-            lock,
-            {'read': [], 'write': [path('/a/b/c')]},
-            {'read': [], 'write': [path('/a/b/c/d')]},
-        ))
-        self.assertEqual(acquired_history[0][1], False)
-        self.assertEqual(acquired_history[1][1], True)
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[], write=[path('/a/b/c')]),
+            lock(read=[], write=[path('/a/b/c/d')]),
+        ), cancel(0), complete(1))
+        self.assertEqual(acquired_history[0], [True, False])
+        self.assertEqual(acquired_history[1], [True, True])
 
     @async_test
     async def test_blocked_read_unblocked_by_cancellation(self):
 
         lock = TreeLock()
 
-        acquired_history = await cancel_first_then_complete_one_at_at_time(create_tree_tasks(
-            lock,
-            {'read': [], 'write': [path('/a/b/c')]},
-            {'read': [path('/a/b/c/d')], 'write': []},
-        ))
-        self.assertEqual(acquired_history[0][1], False)
-        self.assertEqual(acquired_history[1][1], True)
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[], write=[path('/a/b/c')]),
+            lock(read=[path('/a/b/c/d')], write=[]),
+        ), cancel(0), complete(1))
+        self.assertEqual(acquired_history[0], [True, False])
+        self.assertEqual(acquired_history[1], [True, True])
 
     # The below tests are slightly strange edge-cases: where client codes
     # passes nodes in the same lineage
@@ -280,25 +248,22 @@ class TestTreeLock(unittest.TestCase):
         lock = TreeLock()
 
         # Same path
-        acquired_history = await complete_one_at_at_time(create_tree_tasks(
-            lock,
-            {'read': [], 'write': [path('/a/b/c'), path('/a/b/c')]},
-        ))
-        self.assertEqual(acquired_history[0][0], True)
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[], write=[path('/a/b/c'), path('/a/b/c')]),
+        ), complete(0))
+        self.assertEqual(acquired_history[0], [True])
 
         # Descendant path
-        acquired_history = await complete_one_at_at_time(create_tree_tasks(
-            lock,
-            {'read': [], 'write': [path('/a/b/c'), path('/a/b/c/d/e')]},
-        ))
-        self.assertEqual(acquired_history[0][0], True)
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[], write=[path('/a/b/c'), path('/a/b/c/d/e')]),
+        ), complete(0))
+        self.assertEqual(acquired_history[0], [True])
 
         # Ancestor path (ensures the order doesn't matter)
-        acquired_history = await complete_one_at_at_time(create_tree_tasks(
-            lock,
-            {'read': [], 'write': [path('/a/b/c'), path('/a')]},
-        ))
-        self.assertEqual(acquired_history[0][0], True)
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[], write=[path('/a/b/c'), path('/a')]),
+        ), complete(0))
+        self.assertEqual(acquired_history[0], [True])
 
     @async_test
     async def test_reads_to_same_lineage(self):
@@ -306,25 +271,22 @@ class TestTreeLock(unittest.TestCase):
         lock = TreeLock()
 
         # Same path
-        acquired_history = await complete_one_at_at_time(create_tree_tasks(
-            lock,
-            {'read': [path('/a/b/c'), path('/a/b/c')], 'write': []},
-        ))
-        self.assertEqual(acquired_history[0][0], True)
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[path('/a/b/c'), path('/a/b/c')], write=[]),
+        ), complete(0))
+        self.assertEqual(acquired_history[0], [True])
 
         # Descendant path
-        acquired_history = await complete_one_at_at_time(create_tree_tasks(
-            lock,
-            {'read': [path('/a/b/c'), path('/a/b/c/d/e')], 'write': []},
-        ))
-        self.assertEqual(acquired_history[0][0], True)
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[path('/a/b/c'), path('/a/b/c/d/e')], write=[]),
+        ), complete(0))
+        self.assertEqual(acquired_history[0], [True])
 
         # Ancestor path (ensures the order doesn't matter)
-        acquired_history = await complete_one_at_at_time(create_tree_tasks(
-            lock,
-            {'read': [path('/a/b/c'), path('/a')], 'write': []},
-        ))
-        self.assertEqual(acquired_history[0][0], True)
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[path('/a/b/c'), path('/a')], write=[]),
+        ), complete(0))
+        self.assertEqual(acquired_history[0], [True])
 
     @async_test
     async def test_reads_and_write_to_same_lineage(self):
@@ -332,22 +294,19 @@ class TestTreeLock(unittest.TestCase):
         lock = TreeLock()
 
         # Same path
-        acquired_history = await complete_one_at_at_time(create_tree_tasks(
-            lock,
-            {'read': [path('/a/b/c')], 'write': [path('/a/b/c')]},
-        ))
-        self.assertEqual(acquired_history[0][0], True)
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[path('/a/b/c')], write=[path('/a/b/c')]),
+        ), complete(0))
+        self.assertEqual(acquired_history[0], [True])
 
         # Write descendant path of read
-        acquired_history = await complete_one_at_at_time(create_tree_tasks(
-            lock,
-            {'read': [path('/a/b/c')], 'write': [path('/a/b/c/d/e')]},
-        ))
-        self.assertEqual(acquired_history[0][0], True)
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[path('/a/b/c')], write=[path('/a/b/c/d/e')]),
+        ), complete(0))
+        self.assertEqual(acquired_history[0], [True])
 
         # Write ancestor path of read
-        acquired_history = await complete_one_at_at_time(create_tree_tasks(
-            lock,
-            {'read': [path('/a/b/c')], 'write': [path('/a')]},
-        ))
-        self.assertEqual(acquired_history[0][0], True)
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[path('/a/b/c')], write=[path('/a')]),
+        ), complete(0))
+        self.assertEqual(acquired_history[0], [True])
