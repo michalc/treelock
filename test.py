@@ -48,6 +48,12 @@ def complete(i):
     return func
 
 
+def exception(i, exception):
+    def func(tasks):
+        tasks[i].done.set_exception(exception)
+    return func
+
+
 def null(_):
     pass
 
@@ -262,6 +268,26 @@ class TestTreeLock(unittest.TestCase):
         ), cancel(1), complete(0), null, complete(2))
         self.assertEqual(acquired_history[0], [True, False, False])
         self.assertEqual(acquired_history[2], [True, False, True])
+
+    # Ensure exception after acquisition unblocks
+
+    @async_test
+    async def test_exception_after_acquisition_unblocks_write(self):
+
+        lock = TreeLock()
+
+        tasks = create_tree_tasks(
+            lock(read=[], write=[path('/a/b/c')]),
+            lock(read=[], write=[path('/a/b/c/d')]),
+        )
+        exp = Exception('Raised exception')
+        acquired_history = await mutate_tasks_in_sequence(
+            tasks,
+            exception(0, exp), complete(1))
+
+        self.assertEqual(tasks[0].task.exception(), exp)
+        self.assertEqual(acquired_history[0], [True, False])
+        self.assertEqual(acquired_history[1], [True, True])
 
     # The below tests are slightly strange edge-cases: where client codes
     # passes nodes in the same lineage
