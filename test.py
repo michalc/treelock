@@ -18,7 +18,7 @@ def create_tree_tasks(*lock_modes):
     def task(lock_mode):
         acquired = asyncio.Future()
         done = asyncio.Future()
-        task = asyncio.create_task(access(lock_mode, acquired, done))
+        task = asyncio.ensure_future(access(lock_mode, acquired, done))
         return TaskState(acquired=acquired, done=done, task=task)
 
     return [task(lock_mode) for lock_mode in lock_modes]

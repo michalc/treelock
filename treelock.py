@@ -1,5 +1,4 @@
 import asyncio
-import contextlib
 import weakref
 
 from fifolock import FifoLock
@@ -41,14 +40,15 @@ class TreeLock():
     def __init__(self):
         self._locks = weakref.WeakValueDictionary()
 
-    def _with_locks(self, nodes, mode):
-        return [
-            (node, self._locks.setdefault(node, default=FifoLock()), mode)
-            for node in nodes
-        ]
+    def __call__(self, read, write):
+        return TreeLockContextManager(self._locks, read, write)
 
-    @contextlib.asynccontextmanager
-    async def __call__(self, read, write):
+
+class TreeLockContextManager():
+
+    def __init__(self, locks, read, write):
+        self._locks = locks
+
         write_nodes = set(write)
         write_locks = self._with_locks(write_nodes, Write)
 
@@ -64,13 +64,30 @@ class TreeLock():
             - write_nodes - write_ancestor_nodes - read_nodes
         read_ancestor_locks = self._with_locks(read_ancestor_nodes, ReadAncestor)
 
-        sorted_locks = sorted(
+        self._sorted_locks = sorted(
             read_locks + read_ancestor_locks + write_locks + write_ancestor_locks)
-        async with contextlib.AsyncExitStack() as stack:
-            for _, lock, mode in sorted_locks:
-                await stack.enter_async_context(lock(mode))
 
-            yield
+    def _with_locks(self, nodes, mode):
+        return [
+            (node, self._locks.setdefault(node, default=FifoLock()), mode)
+            for node in nodes
+        ]
+
+    async def __aenter__(self):
+        self._acquired = []
+        try:
+            for _, lock, mode in self._sorted_locks:
+                lock_mode = lock(mode)
+                await lock_mode.__aenter__()
+                self._acquired.append(lock_mode)
+
+        except BaseException:
+            await self.__aexit__(None, None, None)
+            raise
+
+    async def __aexit__(self, _, __, ___):
+        for lock_mode in reversed(self._acquired):
+            await lock_mode.__aexit__(None, None, None)
 
 
 def _flatten(to_flatten):

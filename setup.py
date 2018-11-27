@@ -18,7 +18,7 @@ setuptools.setup(
     py_modules=[
         'treelock',
     ],
-    python_requires='>=3.7',
+    python_requires='>=3.5',
     install_requires=[
         'fifolock',
     ],
