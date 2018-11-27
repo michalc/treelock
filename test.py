@@ -213,10 +213,10 @@ class TestTreeLock(unittest.TestCase):
         self.assertEqual(acquired_history[0], [True, False, True])
         self.assertEqual(acquired_history[1], [True, True, True])
 
-    # Ensure cancellation unblocks
+    # Ensure cancellation after acquisition unblocks
 
     @async_test
-    async def test_blocked_write_unblocked_by_cancellation(self):
+    async def test_cancellation_after_acquisition_unblocks_write(self):
 
         lock = TreeLock()
 
@@ -228,7 +228,7 @@ class TestTreeLock(unittest.TestCase):
         self.assertEqual(acquired_history[1], [True, True])
 
     @async_test
-    async def test_blocked_read_unblocked_by_cancellation(self):
+    async def test_cancellation_after_acquisition_unblocks_read(self):
 
         lock = TreeLock()
 
