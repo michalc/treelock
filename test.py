@@ -1,6 +1,6 @@
 import asyncio
 import collections
-import pathlib
+from pathlib import PurePosixPath as path
 import unittest
 
 from treelock import TreeLock
@@ -58,10 +58,6 @@ def async_test(func):
         loop = asyncio.get_event_loop()
         loop.run_until_complete(future)
     return wrapper
-
-
-def path(path_str):
-    return pathlib.PurePosixPath(path_str)
 
 
 class TestTreeLock(unittest.TestCase):
