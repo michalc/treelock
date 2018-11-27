@@ -235,6 +235,34 @@ class TestTreeLock(unittest.TestCase):
         self.assertEqual(acquired_history[0], [True, False])
         self.assertEqual(acquired_history[1], [True, True])
 
+    # Ensure cancellation before acquisition unblocks
+
+    @async_test
+    async def test_cancellation_before_acquisition_unblocks_write(self):
+
+        lock = TreeLock()
+
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[], write=[path('/a/b/c')]),
+            lock(read=[], write=[path('/a/b/c/d')]),
+            lock(read=[], write=[path('/a/b/c/d')]),
+        ), cancel(1), complete(0), null, complete(2))
+        self.assertEqual(acquired_history[0], [True, False, False])
+        self.assertEqual(acquired_history[2], [True, False, True])
+
+    @async_test
+    async def test_cancellation_before_acquisition_unblocks_read(self):
+
+        lock = TreeLock()
+
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[], write=[path('/a/b/c')]),
+            lock(read=[], write=[path('/a/b/c/d')]),
+            lock(read=[path('/a/b/c/d')], write=[]),
+        ), cancel(1), complete(0), null, complete(2))
+        self.assertEqual(acquired_history[0], [True, False, False])
+        self.assertEqual(acquired_history[2], [True, False, True])
+
     # The below tests are slightly strange edge-cases: where client codes
     # passes nodes in the same lineage
 
