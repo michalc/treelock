@@ -57,8 +57,7 @@ class TreeLockContextManager():
         read_ancestor_locks = [self._with_locks(node.parents, ReadAncestor) for node in read]
 
         all_locks = write_locks + write_ancestor_locks + read_locks + read_ancestor_locks 
-        self._sorted_locks = deduplicate_sorted(
-            heapq.merge(*all_locks, key=lambda lock: lock[0], reverse=True))
+        self._sorted_locks = heapq.merge(*all_locks, key=lambda lock: lock[0], reverse=True)
 
     def _with_locks(self, nodes, mode):
         return (
@@ -69,12 +68,17 @@ class TreeLockContextManager():
     async def __aenter__(self):
         self._acquired = []
         try:
-            for _, lock, mode in self._sorted_locks:
+            for index, (node, lock, mode) in enumerate(self._sorted_locks):
+                if index != 0 and previous == node:
+                    continue
+
                 lock_mode = lock(mode)
                 await lock_mode.__aenter__()
                 # We must keep a reference to the lock until we've unlocked to
                 # avoid it being garbage collected from the weakref dict
                 self._acquired.append((lock, lock_mode))
+
+                previous = node
 
         except BaseException:
             await self.__aexit__(None, None, None)
@@ -84,11 +88,3 @@ class TreeLockContextManager():
         for _, lock_mode in reversed(self._acquired):
             await lock_mode.__aexit__(None, None, None)
         self._acquired = []
-
-
-def deduplicate_sorted(iterator):
-    previous = None
-    for index, value in enumerate(iterator):
-        if index == 0 or value[0] != previous[0]:
-            yield value
-        previous = value
