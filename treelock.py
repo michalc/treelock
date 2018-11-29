@@ -1,4 +1,5 @@
 import asyncio
+import heapq
 import weakref
 
 from fifolock import FifoLock
@@ -49,29 +50,21 @@ class TreeLockContextManager():
     def __init__(self, locks, read, write):
         self._locks = locks
 
-        write_nodes = set(write)
-        write_locks = self._with_locks(write_nodes, Write)
+        write_locks = [self._with_locks([node], Write) for node in write]
+        write_ancestor_locks = [self._with_locks(node.parents, WriteAncestor) for node in write]
 
-        write_ancestor_nodes = set(_flatten(node.parents for node in write_nodes)) \
-            - write_nodes
-        write_ancestor_locks = self._with_locks(write_ancestor_nodes, WriteAncestor)
+        read_locks = [self._with_locks([node], Read) for node in read]
+        read_ancestor_locks = [self._with_locks(node.parents, ReadAncestor) for node in read]
 
-        read_nodes = set(read) \
-            - write_nodes - write_ancestor_nodes
-        read_locks = self._with_locks(read_nodes, Read)
-
-        read_ancestor_nodes = set(_flatten(node.parents for node in read_nodes)) \
-            - write_nodes - write_ancestor_nodes - read_nodes
-        read_ancestor_locks = self._with_locks(read_ancestor_nodes, ReadAncestor)
-
-        self._sorted_locks = sorted(
-            read_locks + read_ancestor_locks + write_locks + write_ancestor_locks, reverse=True)
+        all_locks = write_locks + write_ancestor_locks + read_locks + read_ancestor_locks 
+        self._sorted_locks = deduplicate_sorted(
+            heapq.merge(*all_locks, key=lambda lock: lock[0], reverse=True))
 
     def _with_locks(self, nodes, mode):
-        return [
+        return (
             (node, self._locks.setdefault(node, default=FifoLock()), mode)
             for node in nodes
-        ]
+        )
 
     async def __aenter__(self):
         self._acquired = []
@@ -79,18 +72,23 @@ class TreeLockContextManager():
             for _, lock, mode in self._sorted_locks:
                 lock_mode = lock(mode)
                 await lock_mode.__aenter__()
-                self._acquired.append(lock_mode)
+                # We must keep a reference to the lock until we've unlocked to
+                # avoid it being garbage collected from the weakref dict
+                self._acquired.append((lock, lock_mode))
 
         except BaseException:
             await self.__aexit__(None, None, None)
             raise
 
     async def __aexit__(self, _, __, ___):
-        for lock_mode in reversed(self._acquired):
+        for _, lock_mode in reversed(self._acquired):
             await lock_mode.__aexit__(None, None, None)
+        self._acquired = []
 
 
-def _flatten(to_flatten):
-    return [
-        item for sub_list in to_flatten for item in sub_list
-    ]
+def deduplicate_sorted(iterator):
+    previous = None
+    for index, value in enumerate(iterator):
+        if index == 0 or value[0] != previous[0]:
+            yield value
+        previous = value

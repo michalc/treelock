@@ -65,11 +65,11 @@ There is more information on this usage, as well as details of the underlying al
 
 These are a subset of the properties of [PurePosixPath](https://docs.python.org/3/library/pathlib.html#pathlib.PurePosixPath).
 
-- Each defines the `__cmp__` and  `__hash__` methods. These are used for dictionary and sets internally, so `__hash__` must be reasonable enough to to acheive constant-time behaviour.
+- Each defines the `__cmp__` and  `__hash__` methods. These are used for a dictionary internally, so `__hash__` must be reasonable enough to to acheive constant-time behaviour.
 
 - Each must define the `__lt__` method. This must be well-behaved, i.e. defines a total order between all possible nodes, otherwise deadlock can occur.
 
-- Each has a property `parents` that is an iterator to the <em>ancestors</em> of the node, in any order. This is a slightly mis-named property, but this is consistent with PurePosixPath.
+- Each has a property `parents` that is an iterator to the <em>ancestors</em> of the node, in <em>increasing</em> order according to `__lt__`. This is a slightly mis-named property, but this is consistent with PurePosixPath.
 
 Note that a node does not need to be aware of its child nodes. This makes `TreeLock` suitable for locking sub-trees below a node without knowledge of the descendants of that node.
 
