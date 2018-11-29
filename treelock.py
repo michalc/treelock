@@ -65,7 +65,7 @@ class TreeLockContextManager():
         read_ancestor_locks = self._with_locks(read_ancestor_nodes, ReadAncestor)
 
         self._sorted_locks = sorted(
-            read_locks + read_ancestor_locks + write_locks + write_ancestor_locks)
+            read_locks + read_ancestor_locks + write_locks + write_ancestor_locks, reverse=True)
 
     def _with_locks(self, nodes, mode):
         return [
