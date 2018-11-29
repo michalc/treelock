@@ -1,6 +1,6 @@
 # treelock [![CircleCI](https://circleci.com/gh/michalc/treelock.svg?style=svg)](https://circleci.com/gh/michalc/treelock) [![Maintainability](https://api.codeclimate.com/v1/badges/d0174cccc3f8974fa4e7/maintainability)](https://codeclimate.com/github/michalc/treelock/maintainability) [![Test Coverage](https://api.codeclimate.com/v1/badges/d0174cccc3f8974fa4e7/test_coverage)](https://codeclimate.com/github/michalc/treelock/test_coverage)
 
-Constant-time read/write sub-tree locking for asyncio Python. Suitable for large trees, when it's not feasible or desired to have the entire tree in memory at once.
+Fast read/write sub-tree locking for asyncio Python. Suitable for large trees, when it's not feasible or desired to have the entire tree in memory at once.
 
 Inspired by the work of [Ritik Malhotra](https://people.eecs.berkeley.edu/~kubitron/courses/cs262a-F14/projects/reports/project6_report.pdf).
 
@@ -74,7 +74,7 @@ These are a subset of the properties of [PurePosixPath](https://docs.python.org/
 Note that a node does not need to be aware of its child nodes. This makes `TreeLock` suitable for locking sub-trees below a node without knowledge of the descendants of that node.
 
 
-## Constant-time locking and unlocking
+## Fast locking and unlocking
 
 The number of operations to lock or unlock a node only depends on the ancestors of a node. Specifically, it does not increase as the number of descendants increase, nor does it increase with the number of locks currently being held.
 
