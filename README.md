@@ -69,7 +69,7 @@ These are a subset of the properties of [PurePosixPath](https://docs.python.org/
 
 - Each must define the `__lt__` method. This must be well-behaved, i.e. defines a total order between all possible nodes, otherwise deadlock can occur.
 
-- Each has a property `parents` that is an iterator to the <em>ancestors</em> of the node, in <em>increasing</em> order according to `__lt__`. This is a slightly mis-named property, but this is consistent with PurePosixPath.
+- Each has a property `parents` that is an iterator to the <em>ancestors</em> of the node, in <em>decreasing</em> order according to `__lt__`. This is a slightly mis-named property, but this is consistent with PurePosixPath.
 
 Note that a node does not need to be aware of its child nodes. This makes `TreeLock` suitable for locking sub-trees below a node without knowledge of the descendants of that node.
 
