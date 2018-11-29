@@ -11,7 +11,7 @@ setuptools.setup(
     version='0.0.12',
     author='Michal Charemza',
     author_email='michal@charemza.name',
-    description='Constant-time read/write sub-tree locking for asyncio Python',
+    description='Fast read/write sub-tree locking for asyncio Python',
     long_description=long_description(),
     long_description_content_type='text/markdown',
     url='https://github.com/michalc/treelock',
