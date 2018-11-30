@@ -68,22 +68,22 @@ class TreeLockContextManager():
 
     async def __aenter__(self):
         self._acquired = collections.deque()
-        try:
-            for index, (node, lock, mode) in enumerate(self._sorted_locks):
-                if index != 0 and previous == node:
-                    continue
+        for index, (node, lock, mode) in enumerate(self._sorted_locks):
+            if index != 0 and previous == node:
+                continue
 
-                lock_mode = lock(mode)
+            lock_mode = lock(mode)
+            try:
                 await lock_mode.__aenter__()
-                # We must keep a reference to the lock until we've unlocked to
-                # avoid it being garbage collected from the weakref dict
-                self._acquired.append((lock, lock_mode))
+            except BaseException:
+                await self.__aexit__(None, None, None)
+                raise
 
-                previous = node
+            # We must keep a reference to the lock until we've unlocked to
+            # avoid it being garbage collected from the weakref dict
+            self._acquired.append((lock, lock_mode))
 
-        except BaseException:
-            await self.__aexit__(None, None, None)
-            raise
+            previous = node
 
     async def __aexit__(self, _, __, ___):
         while self._acquired:
