@@ -1,4 +1,5 @@
 import asyncio
+import collections
 import heapq
 import weakref
 
@@ -66,7 +67,7 @@ class TreeLockContextManager():
         )
 
     async def __aenter__(self):
-        self._acquired = []
+        self._acquired = collections.deque()
         try:
             for index, (node, lock, mode) in enumerate(self._sorted_locks):
                 if index != 0 and previous == node:
@@ -85,6 +86,5 @@ class TreeLockContextManager():
             raise
 
     async def __aexit__(self, _, __, ___):
-        for _, lock_mode in reversed(self._acquired):
-            await lock_mode.__aexit__(None, None, None)
-        self._acquired = []
+        while self._acquired:
+            await self._acquired.pop()[1].__aexit__(None, None, None)
