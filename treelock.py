@@ -6,6 +6,9 @@ from weakref import WeakValueDictionary
 from fifolock import FifoLock
 
 
+__all__ = ['TreeLock']
+
+
 class ReadAncestor(asyncio.Future):
 
     @staticmethod
