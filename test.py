@@ -303,10 +303,29 @@ class TestTreeLock(unittest.TestCase):
         ), complete(0))
         self.assertEqual(acquired_history[0], [True])
 
-        # Descendant and ancestor paths not in order
+        # Descendant path
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[], write=[path('/a/b/c'), path('/a/b/c/d/e')]),
+        ), complete(0))
+        self.assertEqual(acquired_history[0], [True])
+
+        # Ancestor path (ensures the order doesn't matter)
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[], write=[path('/a/b/c'), path('/a')]),
+        ), complete(0))
+        self.assertEqual(acquired_history[0], [True])
+
+        # Descendant and ancestor paths not in order, highest first
         acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
             lock(read=[], write=[path('/a/b'), path('/a/b/c/d/e/f'),
                                  path('/a/b/c'), path('/a/b/c/d/e')]),
+        ), complete(0))
+        self.assertEqual(acquired_history[0], [True])
+
+        # Descendant and ancestor paths not in order, deepest first
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[], write=[path('/a/b/c/d/e/f'), path('/a/b'),
+                                 path('/a/b/c/d/e'), path('/a/b/c')]),
         ), complete(0))
         self.assertEqual(acquired_history[0], [True])
 
