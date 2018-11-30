@@ -8,7 +8,7 @@ def long_description():
 
 setuptools.setup(
     name='treelock',
-    version='0.0.15',
+    version='0.0.16',
     author='Michal Charemza',
     author_email='michal@charemza.name',
     description='Fast read/write sub-tree locking for asyncio Python',
