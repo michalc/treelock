@@ -1,7 +1,7 @@
 import asyncio
-import collections
-import heapq
-import weakref
+from collections import deque
+from heapq import merge
+from weakref import WeakValueDictionary
 
 from fifolock import FifoLock
 
@@ -40,7 +40,7 @@ class Write(asyncio.Future):
 class TreeLock():
 
     def __init__(self):
-        self._locks = weakref.WeakValueDictionary()
+        self._locks = WeakValueDictionary()
 
     def __call__(self, read, write):
         return TreeLockContextManager(self._locks, read, write)
@@ -52,7 +52,7 @@ class TreeLockContextManager():
         self._locks = locks
         self._read = read
         self._write = write
-        self._acquired = collections.deque()
+        self._acquired = deque()
 
     async def __aenter__(self):
         def with_locks(nodes, mode):
@@ -68,7 +68,7 @@ class TreeLockContextManager():
         read_ancestor_locks = [with_locks(node.parents, ReadAncestor) for node in self._read]
 
         all_locks = write_locks + write_ancestor_locks + read_locks + read_ancestor_locks
-        sorted_locks = heapq.merge(*all_locks, key=lambda lock: lock[0], reverse=True)
+        sorted_locks = merge(*all_locks, key=lambda lock: lock[0], reverse=True)
 
         for index, (node, lock, mode) in enumerate(sorted_locks):
             if index != 0 and previous == node:
