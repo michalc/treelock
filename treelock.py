@@ -50,6 +50,7 @@ class TreeLockContextManager():
 
     def __init__(self, locks, read, write):
         self._locks = locks
+        self._acquired = collections.deque()
 
         write_locks = [self._with_locks([node], Write) for node in write]
         write_ancestor_locks = [self._with_locks(node.parents, WriteAncestor) for node in write]
@@ -67,7 +68,6 @@ class TreeLockContextManager():
         )
 
     async def __aenter__(self):
-        self._acquired = collections.deque()
         for index, (node, lock, mode) in enumerate(self._sorted_locks):
             if index != 0 and previous == node:
                 continue
