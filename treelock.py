@@ -50,25 +50,27 @@ class TreeLockContextManager():
 
     def __init__(self, locks, read, write):
         self._locks = locks
+        self._read = read
+        self._write = write
         self._acquired = collections.deque()
 
-        write_locks = [self._with_locks([node], Write) for node in write]
-        write_ancestor_locks = [self._with_locks(node.parents, WriteAncestor) for node in write]
-
-        read_locks = [self._with_locks([node], Read) for node in read]
-        read_ancestor_locks = [self._with_locks(node.parents, ReadAncestor) for node in read]
-
-        all_locks = write_locks + write_ancestor_locks + read_locks + read_ancestor_locks 
-        self._sorted_locks = heapq.merge(*all_locks, key=lambda lock: lock[0], reverse=True)
-
-    def _with_locks(self, nodes, mode):
-        return (
-            (node, self._locks.setdefault(node, default=FifoLock()), mode)
-            for node in nodes
-        )
-
     async def __aenter__(self):
-        for index, (node, lock, mode) in enumerate(self._sorted_locks):
+        def with_locks(nodes, mode):
+            return (
+                (node, self._locks.setdefault(node, default=FifoLock()), mode)
+                for node in nodes
+            )
+
+        write_locks = [with_locks([node], Write) for node in self._write]
+        write_ancestor_locks = [with_locks(node.parents, WriteAncestor) for node in self._write]
+
+        read_locks = [with_locks([node], Read) for node in self._read]
+        read_ancestor_locks = [with_locks(node.parents, ReadAncestor) for node in self._read]
+
+        all_locks = write_locks + write_ancestor_locks + read_locks + read_ancestor_locks
+        sorted_locks = heapq.merge(*all_locks, key=lambda lock: lock[0], reverse=True)
+
+        for index, (node, lock, mode) in enumerate(sorted_locks):
             if index != 0 and previous == node:
                 continue
 

@@ -289,6 +289,28 @@ class TestTreeLock(unittest.TestCase):
         self.assertEqual(acquired_history[0], [True, False])
         self.assertEqual(acquired_history[1], [True, True])
 
+    # The lock modes can be reused
+
+    @async_test
+    async def test_lock_modes_can_be_reused(self):
+
+        lock = TreeLock()
+
+        lock_write_1 = lock(read=[], write=[path('/a/b/c')])
+        lock_write_2 = lock(read=[], write=[path('/a/b/c')])
+
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock_write_1, lock_write_2),
+            complete(0), complete(1))
+        self.assertEqual(acquired_history[0], [True, False])
+        self.assertEqual(acquired_history[1], [True, True])
+
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock_write_1, lock_write_2),
+            complete(0), complete(1))
+        self.assertEqual(acquired_history[0], [True, False])
+        self.assertEqual(acquired_history[1], [True, True])
+
     # The below tests are slightly strange edge-cases: where client codes
     # passes nodes in the same lineage
 
