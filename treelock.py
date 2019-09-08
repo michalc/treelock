@@ -20,14 +20,14 @@ class Read(asyncio.Future):
 
     @staticmethod
     def is_compatible(holds):
-        return not holds[WriteAncestor] and not holds[Write]
+        return not holds[WriteAncestor] and not holds[Write] and not holds[ReadAndWriteAncestor]
 
 
 class WriteAncestor(asyncio.Future):
 
     @staticmethod
     def is_compatible(holds):
-        return not holds[Read] and not holds[Write]
+        return not holds[Read] and not holds[Write] and not holds[ReadAndWriteAncestor]
 
 
 class Write(asyncio.Future):
@@ -36,8 +36,16 @@ class Write(asyncio.Future):
     def is_compatible(holds):
         return (
             not holds[ReadAncestor] and not holds[Read] and
-            not holds[WriteAncestor] and not holds[Write]
+            not holds[WriteAncestor] and not holds[Write] and
+            not holds[ReadAndWriteAncestor]
         )
+
+
+class ReadAndWriteAncestor(asyncio.Future):
+
+    @staticmethod
+    def is_compatible(holds):
+        return Read.is_compatible(holds) and WriteAncestor.is_compatible(holds)
 
 
 class TreeLock():
@@ -57,6 +65,9 @@ class TreeLockContextManager():
         self._write = write
         self._acquired = deque()
 
+    WriteAncestorAndReadSet = {WriteAncestor, Read}
+    Last = (None, None, None)
+
     async def __aenter__(self):
         def with_locks(nodes, mode):
             return (
@@ -71,13 +82,32 @@ class TreeLockContextManager():
         read_ancestor_locks = [with_locks(node.parents, ReadAncestor) for node in self._read]
 
         all_locks = write_locks + write_ancestor_locks + read_locks + read_ancestor_locks
-        sorted_locks = merge(*all_locks, key=lambda lock: lock[0], reverse=True)
+        sorted_locks = list(merge(*all_locks, key=lambda lock: lock[0], reverse=True))
+        sorted_locks.append(self.Last)
 
+        lock_modes = set()
+        previous = None
         for index, (node, lock, mode) in enumerate(sorted_locks):
-            if index != 0 and previous == node:
+            if index == 0:
+                previous = lock
+
+            if previous == lock:
+                lock_modes.add(mode)
                 continue
 
-            lock_mode = lock(mode)
+            if Write in lock_modes:
+                final_mode = Write
+            elif len(self.WriteAncestorAndReadSet.intersection(lock_modes)) == 2:
+                final_mode = ReadAndWriteAncestor
+            elif WriteAncestor in lock_modes:
+                final_mode = WriteAncestor
+            elif Read in lock_modes:
+                final_mode = Read
+            else:
+                final_mode = ReadAncestor
+
+            lock_modes = {mode}
+            lock_mode = previous(final_mode)
             try:
                 await lock_mode.__aenter__()
             except BaseException:
@@ -86,9 +116,9 @@ class TreeLockContextManager():
 
             # We must keep a reference to the lock until we've unlocked to
             # avoid it being garbage collected from the weakref dict
-            self._acquired.append((lock, lock_mode))
+            self._acquired.append((previous, lock_mode))
 
-            previous = node
+            previous = lock
 
     async def __aexit__(self, _, __, ___):
         while self._acquired:

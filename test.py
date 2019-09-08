@@ -215,6 +215,18 @@ class TestTreeLock(unittest.TestCase):
         self.assertEqual(acquired_history[0], [True, False, True])
         self.assertEqual(acquired_history[1], [True, True, True])
 
+    @async_test
+    async def test_blocked_read_root_and_write_block_write(self):
+
+        lock = TreeLock()
+
+        acquired_history = await mutate_tasks_in_sequence(create_tree_tasks(
+            lock(read=[path('/')], write=[path('/a/b/c')]),
+            lock(read=[], write=[path('/a/b/d')]),
+        ), complete(0), complete(1))
+        self.assertEqual(acquired_history[0], [True, False])
+        self.assertEqual(acquired_history[1], [True, True])
+
     # Ensure cancellation after acquisition unblocks
 
     @async_test
