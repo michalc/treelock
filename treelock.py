@@ -70,7 +70,7 @@ class TreeLockContextManager():
         read_locks = [with_locks([node], Read) for node in self._read]
         read_ancestor_locks = [with_locks(node.parents, ReadAncestor) for node in self._read]
 
-        all_locks = write_locks + write_ancestor_locks + read_locks + read_ancestor_locks
+        all_locks = write_locks + read_locks + write_ancestor_locks + read_ancestor_locks
         sorted_locks = merge(*all_locks, key=lambda lock: lock[0], reverse=True)
 
         for index, (node, lock, mode) in enumerate(sorted_locks):
